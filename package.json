@@ -11,7 +11,8 @@
     "firebase:login": "npx firebase login",
     "mobile:dev": "npm --prefix mobile run dev",
     "mobile:android": "npm --prefix mobile run android",
-    "mobile:build": "npm --prefix mobile run build"
+    "mobile:build": "npm --prefix mobile run build",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
