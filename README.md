@@ -425,9 +425,170 @@ npm run build
 
 ---
 
+---
+
+## 👨‍👩‍👧‍👦 Family Workspace, Invitation System, ₹1 Razorpay Gateway & P2P Engine
+
+FinFam has been upgraded with a comprehensive Family Collaboration Hub, Transactional Email Invitation System, Server-Verified ₹1 Razorpay Gateway, and Double-Entry P2P Virtual Wallet.
+
+### 🛡️ 1. Create Family & 4-Member Email Invitation System
+- **Create Family Screen**:
+  - Family name input with real-time preview card.
+  - Optional family photo/emblem.
+  - 4 default email invitation fields with dynamic `[+ Add Invitee]` and `[✕ Remove]` controls (no artificial limits).
+  - Multi-tier validation: regex format checking, duplicate email rejection, and prevention of inviting the creator's own account.
+  - Explicit review summary before final submission.
+- **Server-Side Transactional Email Service (`server/emailService.js`)**:
+  - Full SMTP integration (`nodemailer`) with fallback to Sandbox Mode (internal outbox and preview modal at `/api/email/inbox`).
+  - Branded responsive HTML email templates with FinFam typography, inviter's display name, family name, invitation expiry (7 days), and privacy explanation.
+  - Cryptographically secure, single-use, expiring SHA-256 tokens (`crypto.randomBytes(32)`). Only token hashes are stored in the database.
+  - Granular per-invitation delivery status (`SENT`, `FAILED` with 1-click `[Retry]` action).
+  - Invitations never create active memberships until explicitly accepted.
+
+### 🔐 2. Email-Matching Invitation Verification & Atomic Join Flow
+- **Deep-Link & Web Invitation Screen (`/accept-invite`)**:
+  - Verifies token validity, expiration, revocation, and prior consumption on page load.
+  - **Strict Email Mismatch Guard**: Verifies that the authenticated user's email strictly matches the invitation's intended email. If mismatched, the server rejects with HTTP 403 (`EMAIL_MISMATCH`) and the UI renders an account switcher banner preventing accidental or malicious cross-account joins.
+  - Reusing an accepted token returns existing membership idempotently without duplicating records.
+  - Single-click `[Accept & Join]` atomically writes the membership record and transitions the invitation to `ACCEPTED`.
+- **Role-Based Access Control**:
+  - **Owner**: Can invite members, resend/revoke pending invitations, remove members, and transfer ownership.
+  - **Member**: Can view shared family finances, goals, bills, and contributions, or voluntarily leave the workspace.
+  - Removed members immediately lose access to family records and real-time streams.
+
+### ⚡ 3. Real-Time Synchronization (Server-Sent Events)
+- Reactive event pipeline (`/api/family/:familyId/stream`) streaming real-time updates for:
+  - New member joins & role changes.
+  - Shared financial goals and bills modifications.
+  - Member contributions and household ledger events.
+  - P2P double-entry wallet transfers without page reloads.
+
+---
+
+### 💳 4. Razorpay ₹1 Premium Upgrade (`paymentgatway-portotype-1` Integration)
+FinFam incorporates the payment gateway architecture and Test Mode credentials from [priyan1436ei-lab/paymentgatway-portotype-1](https://github.com/priyan1436ei-lab/paymentgatway-portotype-1.git):
+
+- **Plan Configuration**:
+  - **Plan ID**: `finfam_premium_one_time`
+  - **Price**: 100 paise = **₹1.00 INR** (One-time purchase, 365 days duration, no automatic renewals).
+  - **Protected Features**: Multiple what-if scenarios, comparative resolution plans, export financial reports, and advanced goal timeline views.
+  - **Server-Enforced Access**: Protected operations (e.g. `/api/premium/export-report`) verify active subscription on the backend before serving data.
+- **Entitlement Isolation**:
+  - The entitlement is strictly bound to the authenticated purchaser's account (`userId`). Family members remain on the Free tier unless they purchase their own upgrade.
+- **Razorpay Checkout & Signature Verification**:
+  - Official Razorpay SDK modal integration (`checkout.js`) with key `rzp_test_TNKQHoOkeQFUas`.
+  - Server-side timing-safe HMAC-SHA256 signature verification (`crypto.timingSafeEqual`) on `razorpay_order_id|razorpay_payment_id`.
+  - Developer Test Simulator signature fallback (`sim_sig_valid_...`) for reliable local sandbox verification.
+  - Idempotent raw-body webhook handler (`/api/payment/webhook`) with replay attack protection.
+  - Purchase recovery endpoint (`/api/payment/user-status/:userId`) ensuring verified status persists across sessions and devices.
+- **Printable GST Tax Receipts (`server/server.js`)**:
+  - Formatted, GST-compliant printable HTML receipt endpoint (`/api/payment/receipt/:paymentId?print=1`) with customer details, order identifiers, 18% GST calculation, and auto-print trigger.
+
+---
+
+### 🏦 5. Family Money Transfers vs Merchant Bank Settlement
+- **Clear Regulatory Boundary**:
+  - Razorpay merchant checkout cannot be used for arbitrary P2P personal payouts between individuals.
+  - Personal money transfers require a dedicated banking switch or UPI DeepLink provider (such as Decentro, Cashfree Payouts, or Setu).
+  - If a banking switch is not connected, the UI explicitly displays **"Bank transfers not connected"**.
+- **Virtual Demo Wallets & Atomic Double-Entry Ledger**:
+  - Integrated from the prototype's `p2p/ledger.ts`:
+  - Each account receives a virtual demo wallet balance (default ₹10,000 for Priyanshu, ₹5,000 for other family members).
+  - Atomic transfer engine (`POST /api/p2p/transfer`) with balance sufficiency check, `senderBalance -₹X`, `receiverBalance +₹X`, idempotency key protection (`idempotencyKey`), and real-time SSE broadcasts.
+- **Merchant Settlement Note for Owner UPI (`priyan1436ei@okhdfcbank`)**:
+  - The provided UPI ID `priyan1436ei@okhdfcbank` is treated as an owner reference address.
+  - In Razorpay, merchant funds settle exclusively to the **verified bank account** configured inside the Razorpay Merchant Dashboard (`Settings -> Bank Account`), NOT automatically to an arbitrary UPI address string.
+  - To link your bank account for live settlement: Log into Razorpay Dashboard -> Go to Settings -> Bank Details -> Complete Penny Drop Verification.
+
+---
+
+### 🧪 6. Automated Acceptance Test Results (22/22 Passed)
+
+All primary requirements have been verified via `node server/tests/acceptance.test.js`:
+
+| # | Test Assertion | Requirement Category | Status |
+|---|----------------|----------------------|:------:|
+| 1 | Rejects invalid email formats | Email Validation | ✅ PASS |
+| 2 | Rejects duplicate invitation emails | Email Validation | ✅ PASS |
+| 3 | Rejects inviting creator's own email | Family Rules | ✅ PASS |
+| 4 | Creates family & dispatches 4 email invitations | Family Creation | ✅ PASS |
+| 5 | Sent emails recorded in outbox with branding | Transactional Email | ✅ PASS |
+| 6 | Cryptographic token verification & preview | Token Security | ✅ PASS |
+| 7 | Rejects acceptance when signed into wrong email | Email Mismatch Guard | ✅ PASS |
+| 8 | Accepts invitation and joins family atomically | Atomic Join | ✅ PASS |
+| 9 | Rejects reusing already accepted token | Token Replay Protection | ✅ PASS |
+| 10 | Owner can revoke pending invitation | Role Permissions | ✅ PASS |
+| 11 | Removed member loses access to family records | Access Control | ✅ PASS |
+| 12 | ₹1 order created with exactly 100 paise | ₹1 Plan Checkout | ✅ PASS |
+| 13 | Rejects invalid/tampered cryptographic signature | Signature Security | ✅ PASS |
+| 14 | Verifies HMAC-SHA256 signature & activates Premium | Server Verification | ✅ PASS |
+| 15 | Entitlement strictly isolated to purchaser | Entitlement Isolation | ✅ PASS |
+| 16 | Protected operation succeeds for Premium, rejected for Free | Protected Backend | ✅ PASS |
+| 17 | Prevents cross-account payment ID reuse | Payment Fraud Prevention | ✅ PASS |
+| 18 | Idempotent webhook processing & duplicate prevention | Webhook Resilience | ✅ PASS |
+| 19 | Clearly reports "Bank transfers not connected" for P2P | Regulatory Accuracy | ✅ PASS |
+| 20 | Gateway config endpoint provides active Razorpay test keyId | Gateway Configuration | ✅ PASS |
+| 21 | Atomic double-entry ledger debits sender & credits receiver | P2P Ledger Engine | ✅ PASS |
+| 22 | Serves GST-compliant printable HTML receipt with print hook | Printable Receipts | ✅ PASS |
+
+---
+
+### 📱 7. Android Development Build & APK Instructions
+
+To package FinFam for Android using Capacitor or Cordova:
+
+1. **Install Capacitor CLI & Android Platform**:
+   ```bash
+   npm install @capacitor/core @capacitor/cli @capacitor/android
+   npx cap init "FinFam" "cloud.finfam.app" --web-dir dist
+   ```
+
+2. **Build Production Web Bundle**:
+   ```bash
+   npm run build
+   npx cap add android
+   npx cap copy
+   ```
+
+3. **Configure Android Deep Links (`AndroidManifest.xml`)**:
+   Add the verified intent filter for invitation links under `<activity android:name=".MainActivity">`:
+   ```xml
+   <intent-filter android:autoVerify="true">
+       <action android:name="android.intent.action.VIEW" />
+       <category android:name="android.intent.category.DEFAULT" />
+       <category android:name="android.intent.category.BROWSABLE" />
+       <data android:scheme="https" android:host="finfam.cloud" android:pathPrefix="/accept-invite" />
+       <data android:scheme="finfam" android:host="invite" />
+   </intent-filter>
+   ```
+
+4. **Compile Debug APK via Android Studio or CLI**:
+   ```bash
+   # Open in Android Studio
+   npx cap open android
+   
+   # Or build debug APK directly via Gradle
+   cd android && ./gradlew assembleDebug
+   # Output APK located at: android/app/build/outputs/apk/debug/app-debug.apk
+   ```
+
+---
+
+### 📋 8. External Configuration Checklist
+
+To transition from Sandbox/Test Mode to Live Production:
+
+- [ ] **Razorpay Live API Keys**: Replace `rzp_test_...` with `rzp_live_...` in environment variables (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`).
+- [ ] **Razorpay Live Webhooks**: In Razorpay Dashboard -> Webhooks -> Add `https://<your-domain>/api/payment/webhook`, subscribe to `payment.captured`, and copy Secret to `RAZORPAY_WEBHOOK_SECRET`.
+- [ ] **Merchant Bank Account**: In Razorpay Dashboard -> Settings -> Bank Account, complete KYC and Penny Drop verification to receive daily/T+2 settlements for ₹1 payments.
+- [ ] **Live SMTP Email Provider**: Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS` (e.g. Amazon SES, SendGrid, Resend, or Google Workspace App Password) in `.env`.
+- [ ] **P2P Banking Switch (Optional)**: If enabling real-time bank transfers between family members, register with an authorized partner (e.g. Decentro, Setu UPI DeepLinks, Cashfree Payouts) and set `ENABLE_P2P_BANKING_SWITCH=true`.
+
+---
+
 ## 📜 License & Credits
 
 Developed for hackathons, financial engineering research, and multi-goal conflict modeling.
 
 **FinFam AI — Understand the Competition. Master the Ripples. Achieve Every Goal.** 💰✨
-# ramco-demo-project-
+

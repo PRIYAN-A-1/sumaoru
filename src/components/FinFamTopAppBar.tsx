@@ -1,121 +1,172 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bell,
   Sparkles,
   ShieldCheck,
   Plus,
-  ScanLine,
   Zap,
   CheckCheck,
   X,
   ArrowRight,
   TrendingUp,
   AlertTriangle,
-  Receipt
+  Mail,
+  UserCheck,
+  Palette,
+  Moon,
+  Sun
 } from 'lucide-react';
 import { useFinFam } from '../context/FinFamContext';
+import { THEME_OPTIONS, FinFamTheme, getSavedTheme, applyTheme } from '../lib/themeManager';
 
 interface FinFamTopAppBarProps {
   currentRoute: string;
   onNavigate: (route: string) => void;
   onOpenAddExpense: () => void;
   onOpenScanReceipt: () => void;
+  onOpenAccountSwitcher?: () => void;
+  onOpenEmailInbox?: () => void;
 }
 
 export const FinFamTopAppBar: React.FC<FinFamTopAppBarProps> = ({
   currentRoute,
   onNavigate,
   onOpenAddExpense,
-  onOpenScanReceipt
+  onOpenScanReceipt,
+  onOpenAccountSwitcher,
+  onOpenEmailInbox
 }) => {
   const { userProfile, notifications, dismissNotification, markAllNotificationsRead } = useFinFam();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [activeTheme, setActiveTheme] = useState<FinFamTheme>(getSavedTheme());
+
+  useEffect(() => {
+    applyTheme(activeTheme);
+  }, [activeTheme]);
+
+  const handleSelectTheme = (theme: FinFamTheme) => {
+    setActiveTheme(theme);
+    applyTheme(theme);
+    setShowThemeMenu(false);
+  };
 
   const unreadCount = notifications.filter((n) => n.isUnread).length;
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#050816]/95 backdrop-blur-md border-b border-white/10 px-4 py-3">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        {/* Left: Avatar, Family Vault name & status */}
-        <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-40 w-full bg-[#050816]/90 backdrop-blur-xl border-b border-white/10 px-3 sm:px-4 py-2">
+      <div className="max-w-5xl mx-auto flex items-center justify-between">
+        {/* Left: Avatar & App Branding */}
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() => onNavigate('profile')}
-            className="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-sm text-white shadow-md shadow-cyan-500/20 hover:ring-2 hover:ring-cyan-400 transition-all"
+            className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center font-black text-xs text-white shadow-md shadow-cyan-500/20 hover:scale-105 active:scale-95 transition-all ring-1 ring-white/20"
             title="View Profile"
           >
             PS
           </button>
           <div className="cursor-pointer" onClick={() => onNavigate('home')}>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-                FinFam
-                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30">
-                  Vault
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-black text-white tracking-tight">FinFam</span>
+              <span className="text-[9px] uppercase font-mono px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                Vault
+              </span>
+              {userProfile.isPremium && (
+                <span className="flex items-center gap-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-500/15 px-1.5 py-0.2 rounded-full border border-emerald-500/30">
+                  <ShieldCheck className="w-2.5 h-2.5" /> PRO
                 </span>
-              </h1>
-              {userProfile.isPremium ? (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                  <ShieldCheck className="w-3 h-3" /> PRO
-                </span>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNavigate('payment');
-                  }}
-                  className="text-[11px] font-semibold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded-full border border-amber-500/30 transition-colors flex items-center gap-1"
-                >
-                  <Sparkles className="w-3 h-3 text-amber-400" /> Upgrade
-                </button>
               )}
             </div>
-            <p className="text-xs text-slate-400 max-w-[200px] sm:max-w-xs truncate">
+            <p className="text-[10px] text-slate-400 truncate max-w-[150px] sm:max-w-xs">
               {userProfile.familyName} • ₹{Math.round(userProfile.totalBalance).toLocaleString('en-IN')}
             </p>
           </div>
         </div>
 
-        {/* Right Actions: OCR Scan, Add Txn, P2P Beam, Notifications */}
-        <div className="flex items-center gap-2">
-          {/* Quick Receipt OCR Scan */}
+        {/* Right: Compact Actions */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Instant Theme Switcher Toggle */}
+          <div className="relative">
+            <button
+              onClick={() => setShowThemeMenu(!showThemeMenu)}
+              className="p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-cyan-300 border border-cyan-500/20 transition-all flex items-center gap-1 text-[11px] font-bold active:scale-95"
+              title="Fast Theme Switcher"
+            >
+              <Palette className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Theme</span>
+            </button>
+
+            {showThemeMenu && (
+              <div className="absolute right-0 mt-2 w-48 rounded-2xl bg-[#0E1528] border border-cyan-500/30 shadow-2xl p-1.5 z-50 animate-fade-in space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block px-2 py-1">
+                  Select Theme
+                </span>
+                {THEME_OPTIONS.map((th) => (
+                  <button
+                    key={th.id}
+                    onClick={() => handleSelectTheme(th.id)}
+                    className={`w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition-all ${
+                      activeTheme === th.id
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>{th.icon}</span>
+                      <span>{th.name}</span>
+                    </span>
+                    {activeTheme === th.id && (
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Account Switcher */}
+          {onOpenAccountSwitcher && (
+            <button
+              onClick={onOpenAccountSwitcher}
+              className="p-1.5 sm:px-2.5 sm:py-1 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-cyan-300 border border-cyan-500/20 transition-all flex items-center gap-1 text-[11px] font-medium"
+              title="Switch Persona"
+            >
+              <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">{userProfile.name.split(' ')[0]}</span>
+            </button>
+          )}
+
+          {/* Email Outbox */}
+          {onOpenEmailInbox && (
+            <button
+              onClick={onOpenEmailInbox}
+              className="p-1.5 sm:px-2.5 sm:py-1 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-emerald-400 border border-emerald-500/20 transition-all flex items-center gap-1 text-[11px] font-medium"
+              title="Invitations & Emails"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Invites</span>
+            </button>
+          )}
+
+          {/* Quick Pay Action */}
           <button
-            onClick={onOpenScanReceipt}
-            className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-cyan-400 border border-cyan-500/20 transition-all flex items-center gap-1.5 text-xs font-medium"
-            title="Scan Receipt OCR"
+            onClick={() => onNavigate('payment')}
+            className="flex items-center gap-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-[#050816] font-black text-[11px] px-2.5 py-1.5 rounded-xl transition-all shadow-sm shadow-cyan-500/20 active:scale-95"
           >
-            <ScanLine className="w-4 h-4" />
-            <span className="hidden md:inline">Scan Receipt</span>
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            <span>Pay</span>
           </button>
 
-          {/* Real-time Transfer Beam */}
-          <button
-            onClick={() => onNavigate('transfer')}
-            className="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-purple-400 border border-purple-500/20 transition-all flex items-center gap-1.5 text-xs font-medium"
-            title="P2P Data & Funds Beam"
-          >
-            <Zap className="w-4 h-4 text-purple-400 animate-pulse" />
-            <span className="hidden md:inline">Live Transfer</span>
-          </button>
-
-          {/* Quick Add Expense */}
-          <button
-            onClick={onOpenAddExpense}
-            className="flex items-center gap-1 bg-cyan-500 hover:bg-cyan-400 text-[#050816] font-bold text-xs px-3 py-2 rounded-lg transition-all shadow-md shadow-cyan-500/20 active:scale-95"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span className="hidden sm:inline">Add Entry</span>
-          </button>
-
-          {/* Notifications Trigger */}
+          {/* Notifications */}
           <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/10 transition-all"
+              className="relative p-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-300 border border-white/10 transition-all active:scale-95"
               title="Notifications"
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="w-3.5 h-3.5" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-[#050816]">
+                <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-rose-500 text-white text-[8px] font-black flex items-center justify-center ring-1 ring-[#050816]">
                   {unreadCount}
                 </span>
               )}

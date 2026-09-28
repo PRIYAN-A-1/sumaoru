@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFinFam } from './context/FinFamContext';
 import { FinFamTopAppBar } from './components/FinFamTopAppBar';
 import { FinFamBottomNavBar } from './components/FinFamBottomNavBar';
@@ -10,9 +10,13 @@ import { PaymentScreen } from './screens/PaymentScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
 import { GoalsAndBudgetsScreen } from './screens/GoalsAndBudgetsScreen';
 import { FamilyAndBillsScreen } from './screens/FamilyAndBillsScreen';
+import { CreateFamilyScreen } from './screens/CreateFamilyScreen';
+import { AcceptInvitationScreen } from './screens/AcceptInvitationScreen';
 import { AiAdvisorScreen } from './screens/AiAdvisorScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { RealTimeDataTransferScreen } from './screens/RealTimeDataTransferScreen';
+import { AccountSwitcherModal } from './components/AccountSwitcherModal';
+import { EmailInboxPreviewModal } from './components/EmailInboxPreviewModal';
 import {
   DecisionOptimizerScreen,
   DecisionResultsScreen,
@@ -62,6 +66,49 @@ export const App: React.FC = () => {
   } = useFinFam();
 
   const [currentRoute, setCurrentRoute] = useState<string>('home');
+  const [inviteToken, setInviteToken] = useState<string>('');
+  const [inviteId, setInviteId] = useState<string>('');
+  const [isAccountSwitcherOpen, setIsAccountSwitcherOpen] = useState(false);
+  const [isEmailInboxOpen, setIsEmailInboxOpen] = useState(false);
+
+  // Check URL query parameters for invitation links on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('inviteToken');
+    const id = params.get('inviteId');
+
+    if (token && id) {
+      setInviteToken(token);
+      setInviteId(id);
+      setCurrentRoute('accept_invite');
+    }
+  }, []);
+
+  const handleOpenJoinUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      const token = parsed.searchParams.get('inviteToken');
+      const id = parsed.searchParams.get('inviteId');
+      if (token && id) {
+        setInviteToken(token);
+        setInviteId(id);
+        setCurrentRoute('accept_invite');
+        return;
+      }
+    } catch (err) {}
+
+    const queryIdx = url.indexOf('?');
+    if (queryIdx >= 0) {
+      const params = new URLSearchParams(url.substring(queryIdx));
+      const token = params.get('inviteToken');
+      const id = params.get('inviteId');
+      if (token && id) {
+        setInviteToken(token);
+        setInviteId(id);
+        setCurrentRoute('accept_invite');
+      }
+    }
+  };
 
   // Modal states
   const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -343,10 +390,39 @@ export const App: React.FC = () => {
           />
         );
 
+      case 'create_family':
+        return (
+          <CreateFamilyScreen
+            onBackToFamily={() => setCurrentRoute('family')}
+            onOpenInviteLink={handleOpenJoinUrl}
+          />
+        );
+
+      case 'accept_invite':
+        return (
+          <AcceptInvitationScreen
+            token={inviteToken}
+            inviteId={inviteId}
+            onJoinedSuccess={() => {
+              setInviteToken('');
+              setInviteId('');
+              setCurrentRoute('family');
+            }}
+            onCancel={() => {
+              setInviteToken('');
+              setInviteId('');
+              setCurrentRoute('home');
+            }}
+            onOpenAccountSwitch={() => setIsAccountSwitcherOpen(true)}
+          />
+        );
+
       case 'family':
         return (
           <FamilyAndBillsScreen
             onOpenAddBill={() => setIsAddBillOpen(true)}
+            onNavigateToCreateFamily={() => setCurrentRoute('create_family')}
+            onNavigateToTransfer={() => setCurrentRoute('payment')}
           />
         );
 
@@ -388,17 +464,33 @@ export const App: React.FC = () => {
         onNavigate={(route) => setCurrentRoute(route)}
         onOpenAddExpense={() => setIsAddExpenseOpen(true)}
         onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
+        onOpenAccountSwitcher={() => setIsAccountSwitcherOpen(true)}
+        onOpenEmailInbox={() => setIsEmailInboxOpen(true)}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 py-3 sm:py-5 pb-20 sm:pb-24">
         {renderActiveScreen()}
       </main>
 
-      {/* Persistent Bottom Navigation */}
+      {/* Persistent Bottom Navigation Dock */}
       <FinFamBottomNavBar
         currentRoute={currentRoute}
         onNavigate={(route) => setCurrentRoute(route)}
+        onOpenAddExpense={() => setIsAddExpenseOpen(true)}
+        onOpenScanReceipt={() => setIsScanReceiptOpen(true)}
+        onOpenAddIncome={() => setIsAddIncomeOpen(true)}
+      />
+
+      {/* Global Modals */}
+      <AccountSwitcherModal
+        isOpen={isAccountSwitcherOpen}
+        onClose={() => setIsAccountSwitcherOpen(false)}
+      />
+      <EmailInboxPreviewModal
+        isOpen={isEmailInboxOpen}
+        onClose={() => setIsEmailInboxOpen(false)}
+        onOpenInviteLink={handleOpenJoinUrl}
       />
 
       {/* Global Modals */}

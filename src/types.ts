@@ -14,13 +14,54 @@ export interface UserProfile {
   healthScore: number;
   previousHealthScore: number;
   isPremium: boolean;
-  premiumTier: 'FREE' | 'PREMIUM_MONTHLY' | 'PREMIUM_ANNUAL' | 'PREMIUM_LIFETIME';
+  premiumTier: 'FREE' | 'PREMIUM_ONE_TIME' | 'PREMIUM_MONTHLY' | 'PREMIUM_ANNUAL' | 'PREMIUM_LIFETIME';
   premiumValidUntil: string;
   familyId: string;
   familyName: string;
+  familyRole?: 'Owner' | 'Member' | 'Admin';
+  photoUrl?: string;
   isBiometricEnabled: boolean;
   isNotificationsEnabled: boolean;
   unreadNotificationsCount: number;
+}
+
+export interface FamilyWorkspaceItem {
+  id: string;
+  name: string;
+  photoUrl?: string | null;
+  ownerId: string;
+  ownerEmail: string;
+  ownerName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FamilyInvitationItem {
+  id: string;
+  familyId: string;
+  familyName?: string;
+  inviterUserId?: string;
+  inviterName?: string;
+  intendedEmail: string;
+  role: string;
+  createdAt: string;
+  expiresAt: string;
+  deliveryStatus: 'PENDING' | 'SENT' | 'FAILED';
+  deliveryError?: string | null;
+  acceptanceStatus: 'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED';
+  acceptedUserId?: string | null;
+  acceptedAt?: string | null;
+  joinUrl?: string;
+  rawToken?: string;
+}
+
+export interface FamilyActivityItem {
+  id: string;
+  familyId: string;
+  type: string;
+  description: string;
+  actorName: string;
+  timestamp: string;
 }
 
 export interface TransactionItem {
@@ -69,7 +110,9 @@ export interface BillItem {
 }
 
 export interface FamilyMemberItem {
-  id: number;
+  id: number | string;
+  userId?: string;
+  familyId?: string;
   name: string;
   role: string;
   email: string;
@@ -407,4 +450,70 @@ export interface SubscriptionPlanTier {
 }
 
 export * from './types/decisionOptimizer';
+
+export type UpiPaymentStatus =
+  | 'INITIATED'
+  | 'CREATED'
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REFUNDED';
+
+export type FinFamPaymentType =
+  | 'UPI_SEND'
+  | 'UPI_QR_PAY'
+  | 'UPI_REQUEST'
+  | 'FAMILY_TRANSFER'
+  | 'GOAL_CONTRIBUTION'
+  | 'BILL_PAY'
+  | 'SUBSCRIPTION_UPGRADE';
+
+export interface FinFamUpiTransaction {
+  transactionId: string;
+  orderId?: string;
+  providerOrderId?: string;
+  paymentId?: string;
+  providerPaymentId?: string;
+  providerReference?: string;
+  paymentProvider?: string;
+  signature?: string;
+  userId: string;
+  familyId?: string;
+  recipientId?: string;
+  recipientName: string;
+  recipientUpi?: string;
+  recipientUpiId?: string;
+  amount: number;
+  amountPaise?: number;
+  currency: string;
+  paymentMethod: string;
+  upiId?: string;
+  purpose: string;
+  type: FinFamPaymentType | string;
+  category: string;
+  status: UpiPaymentStatus;
+  goalId?: number | string | null;
+  goalName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  failureReason?: string | null;
+  refundStatus?: string | null;
+  refundId?: string | null;
+  receiptNumber: string;
+  isCredit: boolean;
+}
+
+export interface FinFamWalletData {
+  userId: string;
+  availableBalance: number;
+  totalReceived: number;
+  totalSent: number;
+  familyContributions: number;
+  goalContributions: number;
+  lastUpdated: string;
+}
+
 

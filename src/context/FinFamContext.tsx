@@ -22,7 +22,14 @@ import {
   LivePeerNode,
   RazorpayTransactionRecord,
   SubscriptionPlanTier,
-  RealTimeTransferType
+  RealTimeTransferType,
+  FamilyWorkspaceItem,
+  FamilyInvitationItem,
+  FamilyActivityItem,
+  FinFamUpiTransaction,
+  FinFamWalletData,
+  UpiPaymentStatus,
+  FinFamPaymentType
 } from '../types';
 import {
   FinancialCapacityResult,
@@ -85,6 +92,7 @@ const INITIAL_PROFILE: UserProfile = {
   premiumValidUntil: 'N/A',
   familyId: 'fam_sharma_001',
   familyName: 'Sharma Family Vault',
+  familyRole: 'Owner',
   isBiometricEnabled: true,
   isNotificationsEnabled: true,
   unreadNotificationsCount: 2
@@ -645,6 +653,21 @@ const INITIAL_TRANSFER_HISTORY: RealTimeTransferRecord[] = [
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlanTier[] = [
   {
+    id: 'finfam_premium_one_time',
+    title: 'FinFam Premium (1 Year)',
+    amountInr: 1.0,
+    amountPaise: 100,
+    durationDays: 365,
+    badge: 'SPECIAL OFFER • ₹1 ONLY',
+    recommended: true,
+    features: [
+      'Save multiple what-if scenarios',
+      'Compare resolution plans',
+      'Export financial reports (PDF & CSV)',
+      'Advanced goal timeline views'
+    ]
+  },
+  {
     id: 'premium_monthly',
     title: 'FinFam Pro Monthly',
     amountInr: 199.0,
@@ -746,8 +769,43 @@ interface FinFamContextType {
   paymentHistory: RazorpayTransactionRecord[];
   activePlanTier: string;
   isSubscriptionActive: boolean;
-  processSubscriptionPayment: (planId: string, paymentMethod: string) => Promise<{ success: boolean; message: string }>;
+  paymentFlowState: 'IDLE' | 'CREATING_ORDER' | 'CHECKOUT_OPEN' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+  lastPaymentError: string | null;
+  familyWorkspace: FamilyWorkspaceItem | null;
+  familyInvitations: FamilyInvitationItem[];
+  familyActivities: FamilyActivityItem[];
+  isRealTimeFamilyConnected: boolean;
+  createFamily: (data: { familyName: string; photoUrl?: string; emails: string[] }) => Promise<{ success: boolean; family?: any; invitations?: any[]; inviteLinks?: any[]; error?: string }>;
+  resendFamilyInvitation: (inviteId: string) => Promise<{ success: boolean; error?: string; joinUrl?: string }>;
+  revokeFamilyInvitation: (inviteId: string) => Promise<{ success: boolean; error?: string }>;
+  verifyInvitationToken: (token: string, inviteId: string) => Promise<{ valid: boolean; invitation?: any; error?: string; code?: string }>;
+  acceptFamilyInvitation: (token: string, inviteId: string) => Promise<{ success: boolean; family?: any; error?: string; code?: string; message?: string; intendedEmail?: string; currentUserEmail?: string }>;
+  removeFamilyMemberFromVault: (memberId: string | number) => Promise<{ success: boolean; error?: string }>;
+  leaveFamilyWorkspace: () => Promise<{ success: boolean; error?: string }>;
+  transferFamilyOwnership: (targetMemberId: string | number) => Promise<{ success: boolean; error?: string }>;
+  switchAccount: (account: { id: number; name: string; email: string; phone?: string; role?: string }) => void;
+  restorePurchases: () => Promise<{ success: boolean; isPremium: boolean; message?: string }>;
+  exportFinancialReport: (reportType?: string) => Promise<{ success: boolean; reportUrl?: string; error?: string }>;
+  processSubscriptionPayment: (planId?: string, paymentMethod?: string, simulateMock?: boolean) => Promise<{ success: boolean; message: string; error?: string }>;
   refundPayment: (paymentId: string) => Promise<{ success: boolean; message: string }>;
+  upiTransactions: FinFamUpiTransaction[];
+  finfamWallet: FinFamWalletData;
+  fetchUpiHistory: (filter?: string, search?: string) => Promise<void>;
+  processUpiPayment: (params: {
+    amount: number;
+    recipientUpi?: string;
+    recipientName: string;
+    recipientId?: string;
+    purpose: string;
+    paymentType?: FinFamPaymentType | string;
+    category?: string;
+    goalId?: number | string;
+    goalName?: string;
+    isDirectVaultTransfer?: boolean;
+  }) => Promise<{ success: boolean; transaction?: FinFamUpiTransaction; message: string; error?: string }>;
+  refundUpiPayment: (transactionId: string, reason?: string) => Promise<{ success: boolean; message: string; error?: string }>;
+  requestUpiMoney: (amount: number, note?: string) => Promise<{ success: boolean; upiUri: string; error?: string }>;
+  contributeToGoalDirect: (goalId: number, goalName: string, amount: number) => Promise<{ success: boolean; message: string; error?: string }>;
   addExpense: (title: string, category: string, amount: number, paymentMethod: string, notes?: string, isFamilyShared?: boolean, memberName?: string) => void;
   addIncome: (title: string, category: string, amount: number, paymentMethod: string, notes?: string, memberName?: string) => void;
   deleteTransaction: (id: number) => void;
@@ -770,7 +828,7 @@ interface FinFamContextType {
   toggleAutoPay: (id: number) => void;
   addFamilyMember: (data: Partial<FamilyMemberItem>) => void;
   updateFamilyMember: (member: FamilyMemberItem) => void;
-  deleteFamilyMember: (id: number) => void;
+  deleteFamilyMember: (id: number | string) => void;
   addEmi: (title: string, category: string, totalAmount: number, monthlyEmi: number, interestRate: number, tenureMonths: number, lenderBank: string, dueDate?: string) => void;
   payEmi: (emiId: number, emiTitle: string, amount: number, method?: string) => void;
   deleteEmi: (id: number) => void;
@@ -817,8 +875,14 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   });
 
   const [familyMembers, setFamilyMembers] = useState<FamilyMemberItem[]>(() => {
-    const saved = localStorage.getItem('finfam_family');
-    return saved ? JSON.parse(saved) : INITIAL_FAMILY;
+    try {
+      const saved = localStorage.getItem('finfam_family');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : INITIAL_FAMILY;
+      }
+    } catch (e) { /* corrupted localStorage */ }
+    return INITIAL_FAMILY;
   });
 
   const [emis, setEmis] = useState<EmiItem[]>(() => {
@@ -863,6 +927,62 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     ];
   });
 
+  const [upiTransactions, setUpiTransactions] = useState<FinFamUpiTransaction[]>([]);
+  const [finfamWallet, setFinfamWallet] = useState<FinFamWalletData>({
+    userId: userProfile.email,
+    availableBalance: 24580.00,
+    totalReceived: 17000.00,
+    totalSent: 7270.00,
+    familyContributions: 5000.00,
+    goalContributions: 3500.00,
+    lastUpdated: new Date().toISOString()
+  });
+
+  const [familyWorkspace, setFamilyWorkspace] = useState<FamilyWorkspaceItem | null>(() => {
+    const saved = localStorage.getItem('finfam_family_workspace');
+    return saved ? JSON.parse(saved) : {
+      id: 'fam_sharma_001',
+      name: 'Sharma Family Vault',
+      photoUrl: null,
+      ownerId: 'priyan1436ei@gmail.com',
+      ownerEmail: 'priyan1436ei@gmail.com',
+      ownerName: 'Priyanshu Sharma',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  });
+
+  const [familyInvitations, setFamilyInvitations] = useState<FamilyInvitationItem[]>(() => {
+    const saved = localStorage.getItem('finfam_family_invitations');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [familyActivities, setFamilyActivities] = useState<FamilyActivityItem[]>(() => {
+    const saved = localStorage.getItem('finfam_family_activities');
+    return saved ? JSON.parse(saved) : [
+      {
+        id: 'act_init_1',
+        familyId: 'fam_sharma_001',
+        type: 'FAMILY_CREATED',
+        description: 'Priyanshu Sharma established the Sharma Family Vault workspace.',
+        actorName: 'Priyanshu Sharma',
+        timestamp: new Date(Date.now() - 86400000 * 30).toISOString()
+      },
+      {
+        id: 'act_init_2',
+        familyId: 'fam_sharma_001',
+        type: 'MEMBER_JOINED',
+        description: 'Rajesh Sharma joined the family workspace as Member.',
+        actorName: 'Rajesh Sharma',
+        timestamp: new Date(Date.now() - 86400000 * 25).toISOString()
+      }
+    ];
+  });
+
+  const [isRealTimeFamilyConnected, setIsRealTimeFamilyConnected] = useState(false);
+  const [paymentFlowState, setPaymentFlowState] = useState<'IDLE' | 'CREATING_ORDER' | 'CHECKOUT_OPEN' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED'>('IDLE');
+  const [lastPaymentError, setLastPaymentError] = useState<string | null>(null);
+
   // Save to LocalStorage
   useEffect(() => { localStorage.setItem('finfam_profile', JSON.stringify(userProfile)); }, [userProfile]);
   useEffect(() => { localStorage.setItem('finfam_transactions', JSON.stringify(transactions)); }, [transactions]);
@@ -870,6 +990,9 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   useEffect(() => { localStorage.setItem('finfam_goals', JSON.stringify(goals)); }, [goals]);
   useEffect(() => { localStorage.setItem('finfam_bills', JSON.stringify(bills)); }, [bills]);
   useEffect(() => { localStorage.setItem('finfam_family', JSON.stringify(familyMembers)); }, [familyMembers]);
+  useEffect(() => { localStorage.setItem('finfam_family_workspace', JSON.stringify(familyWorkspace)); }, [familyWorkspace]);
+  useEffect(() => { localStorage.setItem('finfam_family_invitations', JSON.stringify(familyInvitations)); }, [familyInvitations]);
+  useEffect(() => { localStorage.setItem('finfam_family_activities', JSON.stringify(familyActivities)); }, [familyActivities]);
   useEffect(() => { localStorage.setItem('finfam_emis', JSON.stringify(emis)); }, [emis]);
   useEffect(() => { localStorage.setItem('finfam_notifications', JSON.stringify(notifications)); }, [notifications]);
   useEffect(() => { localStorage.setItem('finfam_transfers', JSON.stringify(realTimeTransferHistory)); }, [realTimeTransferHistory]);
@@ -1034,8 +1157,9 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   }, []);
 
   const familyContributions: FamilyContributionShare[] = useMemo(() => {
-    const total = familyMembers.reduce((acc, m) => acc + m.monthlyContribution, 0) || 1;
-    return familyMembers.map((m) => ({
+    const members = Array.isArray(familyMembers) ? familyMembers : [];
+    const total = members.reduce((acc, m) => acc + m.monthlyContribution, 0) || 1;
+    return members.map((m) => ({
       memberName: `${m.name} (${m.role})`,
       role: m.role,
       contributionAmount: m.monthlyContribution,
@@ -1238,63 +1362,374 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     return newRecord;
   };
 
-  // Razorpay Payments & Subscriptions
+  // Real-Time Family Synchronization via Server-Sent Events (SSE)
+  useEffect(() => {
+    if (!userProfile.familyId) return;
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`/api/family/${userProfile.familyId}/stream`);
+
+      eventSource.onopen = () => {
+        setIsRealTimeFamilyConnected(true);
+      };
+
+      eventSource.addEventListener('snapshot', (e: MessageEvent) => {
+        try {
+          const snapshot = JSON.parse(e.data);
+          if (snapshot.family) setFamilyWorkspace(snapshot.family);
+          if (snapshot.members) setFamilyMembers(snapshot.members);
+          if (snapshot.pendingInvites) setFamilyInvitations(snapshot.pendingInvites);
+          if (snapshot.activities) setFamilyActivities(snapshot.activities);
+        } catch (err) {
+          console.error('Error parsing family snapshot:', err);
+        }
+      });
+
+      eventSource.addEventListener('member_joined', (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          const { member, family } = payload.data;
+          setFamilyMembers((prev) => {
+            if (prev.some((m) => m.email === member.email || m.userId === member.userId)) return prev;
+            return [...prev, member];
+          });
+          if (family) setFamilyWorkspace(family);
+          addNotificationAlert('New Family Member', `${member.name} accepted the invitation and joined the family.`, 'SAVINGS_GOAL_REACHED');
+        } catch (err) {}
+      });
+
+      eventSource.addEventListener('member_removed', (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          const { memberId, userId } = payload.data;
+          setFamilyMembers((prev) => prev.filter((m) => m.id !== memberId && m.userId !== userId));
+          if (userProfile.id.toString() === userId || userProfile.email === userId) {
+            setUserProfile((prev) => ({
+              ...prev,
+              familyId: '',
+              familyName: 'Personal Vault',
+              familyRole: 'Member'
+            }));
+            addNotificationAlert('Family Access Revoked', 'You have been removed from the family workspace.', 'BUDGET_CROSSED');
+          }
+        } catch (err) {}
+      });
+
+      eventSource.addEventListener('invitation_updated', (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          const updated = payload.data;
+          setFamilyInvitations((prev) => {
+            const index = prev.findIndex((i) => i.id === updated.id);
+            if (index >= 0) {
+              const copy = [...prev];
+              copy[index] = updated;
+              return copy;
+            }
+            return [updated, ...prev];
+          });
+        } catch (err) {}
+      });
+
+      eventSource.addEventListener('invitation_revoked', (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          const { inviteId } = payload.data;
+          setFamilyInvitations((prev) =>
+            prev.map((inv) => (inv.id === inviteId ? { ...inv, acceptanceStatus: 'REVOKED' } : inv))
+          );
+        } catch (err) {}
+      });
+
+      eventSource.addEventListener('activity_added', (e: MessageEvent) => {
+        try {
+          const payload = JSON.parse(e.data);
+          const activity = payload.data;
+          setFamilyActivities((prev) => [activity, ...prev]);
+        } catch (err) {}
+      });
+
+      eventSource.onerror = () => {
+        setIsRealTimeFamilyConnected(false);
+      };
+    } catch (err) {
+      console.warn('Real-time family stream initialization notice:', err);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [userProfile.familyId]);
+
+  // Restore purchase from authoritative server records
+  const restorePurchases = async (): Promise<{ success: boolean; isPremium: boolean; message?: string }> => {
+    try {
+      const res = await fetch(`/api/payment/user-status/${encodeURIComponent(userProfile.email)}`);
+      const data = await res.json();
+      if (data.success && data.isPremium) {
+        setUserProfile((prev) => ({
+          ...prev,
+          isPremium: true,
+          premiumTier: (data.subscription?.planId === 'finfam_premium_one_time' ? 'PREMIUM_ONE_TIME' : (data.subscription?.planId?.toUpperCase() || 'PREMIUM_ONE_TIME')) as any,
+          premiumValidUntil: data.validUntil || 'Active'
+        }));
+        return { success: true, isPremium: true, message: `Premium restored! Valid until ${data.validUntil}` };
+      } else {
+        setUserProfile((prev) => ({
+          ...prev,
+          isPremium: false,
+          premiumTier: 'FREE',
+          premiumValidUntil: 'N/A'
+        }));
+        return { success: true, isPremium: false, message: 'No active Premium purchase found for this account.' };
+      }
+    } catch (err: any) {
+      return { success: false, isPremium: false, message: err.message };
+    }
+  };
+
+  // Check purchase status on account change or mount
+  useEffect(() => {
+    restorePurchases();
+  }, [userProfile.email]);
+
+  // Razorpay Server-Verified Payments & Subscriptions
   const isSubscriptionActive = userProfile.isPremium;
   const activePlanTier = userProfile.premiumTier;
 
-  const processSubscriptionPayment = async (planId: string, paymentMethod: string) => {
+// Helper to guarantee Razorpay checkout.js SDK is loaded into the browser document
+const loadRazorpayCheckoutScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') {
+      return resolve(false);
+    }
+    if ((window as any).Razorpay) {
+      return resolve(true);
+    }
+    const existing = document.querySelector('script[src*="checkout.razorpay.com"]');
+    if (existing) {
+      if ((window as any).Razorpay) return resolve(true);
+      existing.addEventListener('load', () => resolve(true));
+      existing.addEventListener('error', () => resolve(false));
+      setTimeout(() => {
+        resolve(Boolean((window as any).Razorpay));
+      }, 1200);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
+  const processSubscriptionPayment = async (
+    planId: string = 'finfam_premium_one_time',
+    paymentMethod: string = 'UPI',
+    simulateMock: boolean = false
+  ): Promise<{ success: boolean; message: string; error?: string }> => {
     const plan = SUBSCRIPTION_PLANS.find((p) => p.id === planId) || SUBSCRIPTION_PLANS[0];
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    setLastPaymentError(null);
+    setPaymentFlowState('CREATING_ORDER');
 
-    const paymentId = `pay_${Math.random().toString(36).substring(2, 12)}`;
-    const orderId = `order_${Math.random().toString(36).substring(2, 12)}`;
+    try {
+      // Step 1: Create order on authoritative backend (verifies auth and checks if already premium)
+      const orderRes = await fetch('/api/payment/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: plan.id,
+          userId: userProfile.email
+        })
+      });
 
-    const endDate = new Date(Date.now() + plan.durationDays * 86400000);
-    const validUntil = endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok || !orderData.success) {
+        setPaymentFlowState('FAILED');
+        const err = orderData.error || 'Failed to create payment order';
+        setLastPaymentError(err);
+        return { success: false, message: err, error: err };
+      }
 
-    const newPaymentRecord: RazorpayTransactionRecord = {
-      id: paymentId,
-      orderId,
-      paymentId,
-      userId: userProfile.email,
-      planId: plan.id,
-      planTitle: plan.title,
-      amount: plan.amountInr,
-      currency: 'INR',
-      status: 'SUCCESS',
-      paymentMethod,
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      timestamp: Date.now(),
-      validUntil
-    };
+      let paymentResult: {
+        paymentId: string;
+        orderId: string;
+        signature: string;
+      };
 
-    setPaymentHistory((prev) => [newPaymentRecord, ...prev]);
+      if (!simulateMock) {
+        // Step 2: Ensure Razorpay Checkout SDK is ready in DOM
+        const isSdkLoaded = await loadRazorpayCheckoutScript();
+        if (!isSdkLoaded || !(window as any).Razorpay) {
+          setPaymentFlowState('FAILED');
+          const err = 'Razorpay Checkout SDK could not be loaded. Please check your internet connection.';
+          setLastPaymentError(err);
+          return { success: false, message: err, error: err };
+        }
 
-    setUserProfile((prev) => ({
-      ...prev,
-      isPremium: true,
-      premiumTier: plan.id.toUpperCase() as any,
-      premiumValidUntil: validUntil
-    }));
+        setPaymentFlowState('CHECKOUT_OPEN');
 
-    addExpense(
-      `${plan.title} Subscription`,
-      'Subscriptions',
-      plan.amountInr,
-      paymentMethod,
-      `Razorpay Gateway Payment ID: ${paymentId}`,
-      false,
-      'Priyanshu'
-    );
+        // Step 3: Open Real-Time Live Razorpay Modal with key rzp_test_TNKQHoOkeQFUas
+        const razorpayKeyId = orderData.keyId || 'rzp_test_TNKQHoOkeQFUas';
 
-    addNotificationAlert(
-      'Payment Successful',
-      `₹${plan.amountInr} paid for ${plan.title}. FinFam Premium active until ${validUntil}.`,
-      'PAYMENT_SUCCESS',
-      `₹${plan.amountInr}`
-    );
+        try {
+          paymentResult = await new Promise((resolve, reject) => {
+            const options = {
+              key: razorpayKeyId,
+              amount: orderData.amountPaise || plan.amountPaise,
+              currency: orderData.currency || 'INR',
+              name: 'FinFam Technologies',
+              description: `${plan.title} - ₹${plan.amountInr} Premium Upgrade`,
+              order_id: orderData.orderId,
+              image: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+              prefill: {
+                name: userProfile.name || 'FinFam User',
+                email: userProfile.email || 'priyan1436ei@gmail.com',
+                contact: '9876543210'
+              },
+              notes: {
+                userId: userProfile.email,
+                planId: plan.id,
+                purpose: 'FinFam ₹1 Premium Upgrade'
+              },
+              theme: {
+                color: '#10B981'
+              },
+              modal: {
+                ondismiss: function () {
+                  reject(new Error('Checkout dismissed by user'));
+                },
+                escape: true,
+                backdropclose: false
+              },
+              handler: function (response: any) {
+                if (!response.razorpay_payment_id || !response.razorpay_signature) {
+                  reject(new Error('Incomplete payment response from Razorpay checkout modal'));
+                  return;
+                }
+                resolve({
+                  paymentId: response.razorpay_payment_id,
+                  orderId: response.razorpay_order_id || orderData.orderId,
+                  signature: response.razorpay_signature
+                });
+              }
+            };
 
-    return { success: true, message: `Activated ${plan.title} successfully!` };
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', function (resp: any) {
+              reject(new Error(resp.error?.description || 'Razorpay payment was not authorized'));
+            });
+            rzp.open();
+          });
+        } catch (checkoutErr: any) {
+          if (checkoutErr.message === 'Checkout dismissed by user') {
+            setPaymentFlowState('CANCELLED');
+            return {
+              success: false,
+              message: 'Payment cancelled. You can retry anytime whenever you are ready.',
+              error: 'Payment cancelled'
+            };
+          }
+          setPaymentFlowState('FAILED');
+          const errMsg = checkoutErr.message || 'Payment failed';
+          setLastPaymentError(errMsg);
+          return { success: false, message: errMsg, error: errMsg };
+        }
+      } else {
+        // Explicit automated/sandbox bypass
+        const mockPaymentId = `pay_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+        const mockSignature = `sim_sig_valid_${orderData.orderId}_${mockPaymentId}`;
+        paymentResult = {
+          paymentId: mockPaymentId,
+          orderId: orderData.orderId,
+          signature: mockSignature
+        };
+      }
+
+      setPaymentFlowState('AWAITING_CONFIRMATION');
+
+      // Step 4: Verify signature on backend using stored order ID and activate ONLY for purchaser
+      const verifyRes = await fetch('/api/payment/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razorpayPaymentId: paymentResult.paymentId,
+          razorpayOrderId: paymentResult.orderId,
+          razorpaySignature: paymentResult.signature,
+          planId: plan.id,
+          paymentMethod,
+          userId: userProfile.email
+        })
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.success) {
+        setPaymentFlowState('FAILED');
+        const err = verifyData.error || 'Payment signature verification failed. Premium remains locked.';
+        setLastPaymentError(err);
+        return { success: false, message: err, error: err };
+      }
+
+      // Step 5: Atomically unlock Premium ONLY for the authenticated purchaser account
+      setPaymentFlowState('VERIFIED');
+
+      setUserProfile((prev) => ({
+        ...prev,
+        isPremium: true,
+        premiumTier: (plan.id === 'finfam_premium_one_time' ? 'PREMIUM_ONE_TIME' : plan.id.toUpperCase()) as any,
+        premiumValidUntil: verifyData.validUntil
+      }));
+
+      const newPaymentRecord: RazorpayTransactionRecord = {
+        id: paymentResult.paymentId,
+        orderId: orderData.orderId,
+        paymentId: paymentResult.paymentId,
+        signature: paymentResult.signature,
+        userId: userProfile.email,
+        planId: plan.id,
+        planTitle: plan.title,
+        amount: plan.amountInr,
+        currency: 'INR',
+        status: 'SUCCESS',
+        paymentMethod,
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        timestamp: Date.now(),
+        validUntil: verifyData.validUntil
+      };
+
+      setPaymentHistory((prev) => [newPaymentRecord, ...prev]);
+
+      addExpense(
+        `${plan.title} Upgrade`,
+        'Subscriptions',
+        plan.amountInr,
+        paymentMethod,
+        `Razorpay Verified Order: ${orderData.orderId} (Payment: ${paymentResult.paymentId})`,
+        false,
+        userProfile.name
+      );
+
+      addNotificationAlert(
+        'Payment Verified & Premium Activated',
+        `₹${plan.amountInr} verified for ${plan.title}. Active until ${verifyData.validUntil}.`,
+        'PAYMENT_SUCCESS',
+        `₹${plan.amountInr}`
+      );
+
+      return {
+        success: true,
+        message: `Payment verified. ${plan.title} unlocked for ${userProfile.name}!`
+      };
+    } catch (err: any) {
+      setPaymentFlowState('FAILED');
+      setLastPaymentError(err.message || 'Payment network error');
+      return { success: false, message: err.message, error: err.message };
+    }
   };
 
   const refundPayment = async (paymentId: string) => {
@@ -1313,6 +1748,633 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       })
     );
     return { success: true, message: 'Refund initiated successfully. Will reflect in 2-3 banking days.' };
+  };
+
+  const fetchUpiHistory = async (filter: string = 'ALL', search: string = '') => {
+    try {
+      const res = await fetch(
+        `/api/payments/history?userId=${encodeURIComponent(userProfile.email)}&filter=${encodeURIComponent(
+          filter
+        )}&search=${encodeURIComponent(search)}`
+      );
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUpiTransactions(data.transactions || []);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch UPI history:', e);
+    }
+  };
+
+  const fetchWallet = async () => {
+    try {
+      const res = await fetch(`/api/payments/wallet/${encodeURIComponent(userProfile.email)}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.wallet) {
+        setFinfamWallet(data.wallet);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch wallet:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchUpiHistory();
+    fetchWallet();
+  }, [userProfile.email]);
+
+  // Real-time SSE Payment event listener
+  useEffect(() => {
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource('/api/payments/stream');
+      es.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (
+            payload.type === 'TRANSACTION_CREATED' ||
+            payload.type === 'TRANSACTION_CONFIRMED' ||
+            payload.type === 'PAYMENT_CONFIRMED' ||
+            payload.type === 'PAYMENT_REFUNDED' ||
+            payload.type === 'GOAL_CONTRIBUTED'
+          ) {
+            fetchUpiHistory();
+            fetchWallet();
+            if (payload.type === 'PAYMENT_CONFIRMED' && payload.transaction) {
+              addNotificationAlert(
+                `Payment Successful: ₹${payload.transaction.amount} paid to ${payload.transaction.recipientName}`,
+                'PAYMENT_SUCCESS',
+                `₹${payload.transaction.amount}`
+              );
+            }
+          }
+        } catch (err) {}
+      };
+    } catch (e) {
+      console.warn('SSE Payment stream error:', e);
+    }
+
+    return () => {
+      if (es) es.close();
+    };
+  }, [userProfile.email]);
+
+  const processUpiPayment = async ({
+    amount,
+    recipientUpi = '',
+    recipientName = 'Merchant / Recipient',
+    recipientId = '',
+    purpose = 'UPI Payment',
+    paymentType = 'UPI_SEND',
+    category = 'General',
+    goalId,
+    goalName,
+    isDirectVaultTransfer = false
+  }: {
+    amount: number;
+    recipientUpi?: string;
+    recipientName: string;
+    recipientId?: string;
+    purpose: string;
+    paymentType?: FinFamPaymentType | string;
+    category?: string;
+    goalId?: number | string;
+    goalName?: string;
+    isDirectVaultTransfer?: boolean;
+  }): Promise<{ success: boolean; transaction?: FinFamUpiTransaction; message: string; error?: string }> => {
+    setLastPaymentError(null);
+    setPaymentFlowState('CREATING_ORDER');
+
+    try {
+      const orderRes = await fetch('/api/payments/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          recipientUpi,
+          recipientName,
+          recipientId,
+          purpose,
+          paymentType,
+          category,
+          goalId,
+          goalName,
+          familyId: userProfile.familyId,
+          userId: userProfile.email,
+          isDirectVaultTransfer
+        })
+      });
+
+      const orderData = await orderRes.json();
+      if (!orderRes.ok || !orderData.success) {
+        setPaymentFlowState('FAILED');
+        const err = orderData.error || 'Failed to create payment order';
+        setLastPaymentError(err);
+        return { success: false, message: err, error: err };
+      }
+
+      // If direct real-time vault transfer executed
+      if (orderData.isDirectTransfer && orderData.transaction) {
+        setPaymentFlowState('VERIFIED');
+        if (orderData.wallet) {
+          setFinfamWallet(orderData.wallet);
+        }
+        setUpiTransactions((prev) => [orderData.transaction, ...prev.filter((t) => t.transactionId !== orderData.transaction.transactionId)]);
+        
+        if (paymentType !== 'GOAL_CONTRIBUTION') {
+          addExpense(
+            recipientName || (recipientUpi ? recipientUpi.split('@')[0] : 'UPI Recipient'),
+            category || 'UPI Payment',
+            amount,
+            'UPI',
+            `Direct Vault Ref: ${orderData.transactionId} (${purpose})`,
+            paymentType === 'FAMILY_TRANSFER',
+            userProfile.name
+          );
+        } else if (goalId) {
+          depositGoal(Number(goalId), amount);
+        }
+
+        addNotificationAlert(
+          '✓ Payment Successful',
+          `₹${amount.toLocaleString('en-IN')} transferred in real-time to ${recipientUpi || recipientName}.`,
+          'PAYMENT_SUCCESS',
+          `₹${amount}`
+        );
+
+        return {
+          success: true,
+          transaction: orderData.transaction,
+          message: orderData.message || `₹${amount.toLocaleString('en-IN')} transferred successfully.`
+        };
+      }
+
+      const isLoaded = await loadRazorpayCheckoutScript();
+      if (!isLoaded || !(window as any).Razorpay) {
+        setPaymentFlowState('FAILED');
+        const err = 'Unable to load payment checkout SDK.';
+        setLastPaymentError(err);
+        return { success: false, message: err, error: err };
+      }
+
+      setPaymentFlowState('CHECKOUT_OPEN');
+
+      const paymentResult: {
+        paymentId: string;
+        orderId: string;
+        signature: string;
+      } = await new Promise((resolve, reject) => {
+        const options = {
+          key: orderData.keyId || 'rzp_test_TNKQHoOkeQFUas',
+          amount: orderData.amountPaise,
+          currency: orderData.currency || 'INR',
+          name: 'FinFam Pay',
+          description: `${purpose} - ₹${amount}`,
+          order_id: orderData.orderId,
+          image: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+          prefill: {
+            name: userProfile.name,
+            email: userProfile.email,
+            contact: '9876543210'
+          },
+          notes: {
+            transactionId: orderData.transactionId,
+            userId: userProfile.email,
+            purpose,
+            recipientUpi
+          },
+          theme: {
+            color: '#10B981'
+          },
+          modal: {
+            ondismiss: function () {
+              reject(new Error('Checkout dismissed by user'));
+            },
+            escape: true,
+            backdropclose: false
+          },
+          handler: function (response: any) {
+            if (!response.razorpay_payment_id || !response.razorpay_signature) {
+              reject(new Error('Incomplete signature received from checkout gateway'));
+              return;
+            }
+            resolve({
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id || orderData.orderId,
+              signature: response.razorpay_signature
+            });
+          }
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.on('payment.failed', function (resp: any) {
+          reject(new Error(resp.error?.description || 'Payment authorization failed on gateway.'));
+        });
+        rzp.open();
+      });
+
+      setPaymentFlowState('AWAITING_CONFIRMATION');
+
+      const verifyRes = await fetch('/api/payments/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          razorpayPaymentId: paymentResult.paymentId,
+          razorpayOrderId: paymentResult.orderId,
+          razorpaySignature: paymentResult.signature,
+          transactionId: orderData.transactionId,
+          paymentMethod: 'UPI',
+          userId: userProfile.email
+        })
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.success) {
+        setPaymentFlowState('FAILED');
+        const err = verifyData.error || 'Server signature verification failed';
+        setLastPaymentError(err);
+        return { success: false, message: err, error: err };
+      }
+
+      setPaymentFlowState('VERIFIED');
+
+      if (paymentType !== 'GOAL_CONTRIBUTION') {
+        addExpense(
+          recipientName,
+          category || 'UPI Payment',
+          amount,
+          'UPI',
+          `UPI Ref: ${orderData.transactionId} (${purpose})`,
+          paymentType === 'FAMILY_TRANSFER',
+          userProfile.name
+        );
+      }
+
+      if (goalId) {
+        depositGoal(Number(goalId), amount);
+      }
+
+      fetchUpiHistory();
+      fetchWallet();
+
+      return {
+        success: true,
+        transaction: verifyData.transaction,
+        message: `✓ ₹${amount} successfully paid to ${recipientName} via UPI.`
+      };
+    } catch (err: any) {
+      if (err.message === 'Checkout dismissed by user') {
+        setPaymentFlowState('CANCELLED');
+        return { success: false, message: 'Payment cancelled.', error: 'Payment cancelled' };
+      }
+      setPaymentFlowState('FAILED');
+      const msg = err.message || 'Payment processing failed';
+      setLastPaymentError(msg);
+      return { success: false, message: msg, error: msg };
+    }
+  };
+
+  const refundUpiPayment = async (transactionId: string, reason: string = 'User refund request') => {
+    try {
+      const res = await fetch(`/api/payments/${transactionId}/refund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchUpiHistory();
+        fetchWallet();
+        addNotificationAlert(`Refund Processed: ₹${data.transaction.amount} refunded`, 'INFO', 'Refund');
+        return { success: true, message: data.message };
+      }
+      return { success: false, error: data.error || 'Refund failed', message: data.error };
+    } catch (e: any) {
+      return { success: false, error: e.message, message: e.message };
+    }
+  };
+
+  const requestUpiMoney = async (amount: number, note: string = 'FinFam Money Request') => {
+    try {
+      const res = await fetch('/api/payments/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          note,
+          requesterUpi: 'priyan1436ei@okhdfcbank',
+          requesterName: userProfile.name,
+          userId: userProfile.email
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        return { success: true, upiUri: data.upiUri };
+      }
+      return { success: false, error: data.error || 'Request creation failed', upiUri: '' };
+    } catch (e: any) {
+      return { success: false, error: e.message, upiUri: '' };
+    }
+  };
+
+  const contributeToGoalDirect = async (goalId: number, goalName: string, amount: number) => {
+    return processUpiPayment({
+      amount,
+      recipientName: `${goalName} Goal Vault`,
+      recipientUpi: 'finfam.goals@hdfcbank',
+      purpose: `Direct Goal Contribution: ${goalName}`,
+      paymentType: 'GOAL_CONTRIBUTION',
+      category: 'Goals',
+      goalId,
+      goalName
+    });
+  };
+
+  // Protected Backend Operation: Export Financial Report (Requires active Premium)
+  const exportFinancialReport = async (reportType: string = 'ANNUAL_SUMMARY') => {
+    try {
+      const res = await fetch('/api/premium/export-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userProfile.email,
+          reportType
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Active FinFam Premium required to export reports.');
+      }
+      return { success: true, reportUrl: data.reportUrl };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Multi-Account Persona Switcher (For testing multi-user invite & join flows)
+  const switchAccount = (account: { id: number; name: string; email: string; phone?: string; role?: string }) => {
+    setUserProfile((prev) => ({
+      ...prev,
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      phone: account.phone || prev.phone,
+      familyRole: (account.role || 'Member') as any,
+      // Fresh user starts with Free status until verified from backend
+      isPremium: false,
+      premiumTier: 'FREE',
+      premiumValidUntil: 'N/A'
+    }));
+  };
+
+  // Family Management Actions
+  const createFamily = async ({
+    familyName,
+    photoUrl,
+    emails
+  }: {
+    familyName: string;
+    photoUrl?: string;
+    emails: string[];
+  }) => {
+    try {
+      const res = await fetch('/api/family/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          familyName,
+          photoUrl,
+          inviteEmails: emails,
+          ownerUserId: userProfile.email,
+          ownerEmail: userProfile.email,
+          ownerName: userProfile.name
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create family workspace');
+      }
+
+      setFamilyWorkspace(data.family);
+      setFamilyInvitations(data.invitations || []);
+      setUserProfile((prev) => ({
+        ...prev,
+        familyId: data.family.id,
+        familyName: data.family.name,
+        familyRole: 'Owner'
+      }));
+
+      // Creator is Owner
+      const ownerMember: FamilyMemberItem = {
+        id: Date.now(),
+        name: userProfile.name,
+        role: 'Owner',
+        email: userProfile.email,
+        avatarColor: '#06B6D4',
+        monthlyContribution: userProfile.monthlySavings,
+        spentThisMonth: 0,
+        salaryIncome: userProfile.monthlyIncome,
+        freelanceIncome: 0,
+        businessIncome: 0,
+        rentalIncome: 0,
+        otherIncome: 0,
+        foodExpense: 0,
+        transportExpense: 0,
+        shoppingExpense: 0,
+        educationExpense: 0,
+        healthExpense: 0,
+        entertainmentExpense: 0,
+        bankSavings: userProfile.totalBalance,
+        emergencyFund: userProfile.emergencyFund,
+        fixedDeposit: 0,
+        mutualFund: 0,
+        monthlyEmi: 0,
+        equityInvestments: 0,
+        goldInvestments: 0,
+        ppfInvestments: 0,
+        fdInterest: 0,
+        rdInterest: 0,
+        savingsInterest: 0,
+        investmentReturns: 0
+      };
+      setFamilyMembers([ownerMember]);
+
+      addNotificationAlert(
+        'Family Workspace Created',
+        `Created "${data.family.name}" with ${data.invitations.length} invitations dispatched.`,
+        'SAVINGS_GOAL_REACHED'
+      );
+
+      return {
+        success: true,
+        family: data.family,
+        invitations: data.invitations,
+        inviteLinks: data.inviteLinks
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const resendFamilyInvitation = async (inviteId: string) => {
+    try {
+      const res = await fetch(`/api/family/invitations/${inviteId}/resend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestingUserId: userProfile.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resend invitation');
+
+      setFamilyInvitations((prev) =>
+        prev.map((inv) => (inv.id === inviteId ? { ...inv, ...data.invitation } : inv))
+      );
+
+      return { success: true, joinUrl: data.joinUrl };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const revokeFamilyInvitation = async (inviteId: string) => {
+    try {
+      const res = await fetch(`/api/family/invitations/${inviteId}/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestingUserId: userProfile.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to revoke invitation');
+
+      setFamilyInvitations((prev) =>
+        prev.map((inv) => (inv.id === inviteId ? { ...inv, acceptanceStatus: 'REVOKED' } : inv))
+      );
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const verifyInvitationToken = async (token: string, inviteId: string) => {
+    try {
+      const res = await fetch(
+        `/api/family/invitations/verify?token=${encodeURIComponent(token)}&id=${encodeURIComponent(inviteId)}`
+      );
+      const data = await res.json();
+      return data;
+    } catch (err: any) {
+      return { valid: false, error: err.message };
+    }
+  };
+
+  const acceptFamilyInvitation = async (token: string, inviteId: string) => {
+    try {
+      const res = await fetch('/api/family/invitations/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          inviteId,
+          user: {
+            id: userProfile.email,
+            email: userProfile.email,
+            name: userProfile.name
+          }
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return {
+          success: false,
+          code: data.code,
+          error: data.error,
+          intendedEmail: data.intendedEmail,
+          currentUserEmail: data.currentUserEmail
+        };
+      }
+
+      // Successfully joined family workspace
+      setUserProfile((prev) => ({
+        ...prev,
+        familyId: data.family.id,
+        familyName: data.family.name,
+        familyRole: (data.member?.role || 'Member') as any
+      }));
+      setFamilyWorkspace(data.family);
+
+      addNotificationAlert(
+        'Joined Family Workspace',
+        `You have successfully joined "${data.family.name}".`,
+        'SAVINGS_GOAL_REACHED'
+      );
+
+      return { success: true, family: data.family, message: data.message };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const removeFamilyMemberFromVault = async (memberId: string | number) => {
+    try {
+      const res = await fetch(`/api/family/${userProfile.familyId}/members/${memberId}/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestingUserId: userProfile.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to remove member');
+
+      setFamilyMembers((prev) => prev.filter((m) => m.id !== memberId && m.userId !== memberId));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const leaveFamilyWorkspace = async () => {
+    try {
+      const res = await fetch(`/api/family/${userProfile.familyId}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userProfile.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to leave family');
+
+      setUserProfile((prev) => ({
+        ...prev,
+        familyId: '',
+        familyName: 'Personal Workspace',
+        familyRole: 'Member'
+      }));
+      setFamilyMembers([]);
+      setFamilyInvitations([]);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const transferFamilyOwnership = async (targetMemberId: string | number) => {
+    try {
+      const res = await fetch(`/api/family/${userProfile.familyId}/transfer-ownership`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetMemberId,
+          requestingUserId: userProfile.email
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to transfer ownership');
+
+      setUserProfile((prev) => ({ ...prev, familyRole: 'Member' }));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   };
 
   // CRUD Operations
@@ -1533,7 +2595,7 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     setFamilyMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
   };
 
-  const deleteFamilyMember = (id: number) => {
+  const deleteFamilyMember = (id: number | string) => {
     setFamilyMembers((prev) => prev.filter((m) => m.id !== id));
   };
 
@@ -1744,8 +2806,32 @@ export const FinFamProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         paymentHistory,
         activePlanTier,
         isSubscriptionActive,
+        paymentFlowState,
+        lastPaymentError,
+        familyWorkspace,
+        familyInvitations,
+        familyActivities,
+        isRealTimeFamilyConnected,
+        createFamily,
+        resendFamilyInvitation,
+        revokeFamilyInvitation,
+        verifyInvitationToken,
+        acceptFamilyInvitation,
+        removeFamilyMemberFromVault,
+        leaveFamilyWorkspace,
+        transferFamilyOwnership,
+        switchAccount,
+        restorePurchases,
+        exportFinancialReport,
         processSubscriptionPayment,
         refundPayment,
+        upiTransactions,
+        finfamWallet,
+        fetchUpiHistory,
+        processUpiPayment,
+        refundUpiPayment,
+        requestUpiMoney,
+        contributeToGoalDirect,
         addExpense,
         addIncome,
         deleteTransaction,

@@ -10,10 +10,17 @@ import {
   LogOut,
   ChevronRight,
   Sparkles,
-  Scale
+  Scale,
+  Moon,
+  Lock,
+  FileText,
+  HelpCircle,
+  Smartphone,
+  Eye
 } from 'lucide-react';
 import { useFinFam } from '../context/FinFamContext';
 import { FinancialEngine } from '../lib/financialEngine';
+import { FinFamCard, CurrencyText, StatusBadge } from '../components/ui/FinFamDesignSystem';
 
 export const ProfileScreen: React.FC<{
   onNavigateToDecisionOptimizer?: () => void;
@@ -31,13 +38,32 @@ export const ProfileScreen: React.FC<{
     setIsEditingName(false);
   };
 
+  const menuSections = [
+    {
+      title: 'Account & Family',
+      items: [
+        { icon: User, label: 'Financial Profile & Net Worth', desc: 'Family KYC and tax brackets', badge: 'Verified' },
+        { icon: Users, label: 'Family Members & Allocations', desc: `${familyMembers.length} active family members`, badge: userProfile.familyName },
+        { icon: CreditCard, label: 'Payment Settings & UPI VPAs', desc: 'Default banks & autopay rules', badge: 'Active' }
+      ]
+    },
+    {
+      title: 'Security & Preferences',
+      items: [
+        { icon: Lock, label: 'Vault Privacy & Security Shield', desc: 'End-to-end encrypted family ledger', badge: 'AES-256' },
+        { icon: Moon, label: 'Appearance & Theme', desc: 'Fintech Obsidian Dark Mode (Default)', badge: 'Dark' },
+        { icon: HelpCircle, label: 'Help & Priority Concierge', desc: '24/7 FinFam instant support', badge: 'Live' }
+      ]
+    }
+  ];
+
   return (
-    <div className="space-y-6 pb-28">
-      {/* Header Profile Card */}
-      <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0B1530] via-[#0E1B42] to-[#122256] border border-cyan-500/30 shadow-2xl relative overflow-hidden space-y-4">
+    <div className="space-y-6 pb-28 max-w-5xl mx-auto animate-fade-in text-slate-100">
+      {/* Header Profile Hero Card */}
+      <FinFamCard variant="accent" className="p-6 relative overflow-hidden space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-cyan-500 flex items-center justify-center font-bold text-2xl text-[#050816] shadow-lg shadow-cyan-500/30">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center font-black text-2xl text-white shadow-xl shadow-cyan-500/25">
               {userProfile.name.split(' ').map((n) => n[0]).join('')}
             </div>
 
@@ -48,11 +74,11 @@ export const ProfileScreen: React.FC<{
                     type="text"
                     value={userName}
                     onChange={(e) => setUserName(e.target.value)}
-                    className="bg-[#050816] border border-cyan-500/50 rounded-lg px-2.5 py-1 text-sm text-white font-bold"
+                    className="bg-[#050816] border border-cyan-500/50 rounded-xl px-3 py-1.5 text-sm text-white font-bold focus:outline-none"
                   />
                   <button
                     onClick={handleSaveName}
-                    className="px-2 py-1 bg-cyan-500 text-[#050816] rounded-lg text-xs font-bold"
+                    className="px-3 py-1.5 bg-cyan-500 text-[#050816] rounded-xl text-xs font-bold"
                   >
                     Save
                   </button>
@@ -69,39 +95,40 @@ export const ProfileScreen: React.FC<{
               )}
               <div className="text-xs text-slate-400 mt-0.5">{userProfile.email}</div>
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
-                  {userProfile.familyName}
-                </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
-                  Tier: {userProfile.premiumTier || 'FREE'}
-                </span>
+                <StatusBadge status="info" label={userProfile.familyName} />
+                <StatusBadge
+                  status={userProfile.isPremium ? 'pro' : 'neutral'}
+                  label={userProfile.isPremium ? '💎 PRO VAULT' : 'FREE TIER'}
+                />
               </div>
             </div>
           </div>
 
-          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-white/10">
-            <div className="text-[10px] text-slate-400">Total Net Worth</div>
-            <div className="text-xl font-black font-mono text-cyan-400">
+          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-slate-800">
+            <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Total Net Worth</div>
+            <div className="text-2xl font-black font-mono text-cyan-400">
               {FinancialEngine.formatINR(userProfile.totalBalance)}
             </div>
           </div>
         </div>
-      </div>
+      </FinFamCard>
 
-      {/* AIML 04 Quick Banner */}
+      {/* Decision AI Optimizer Banner */}
       {onNavigateToDecisionOptimizer && (
         <div
           onClick={onNavigateToDecisionOptimizer}
-          className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/40 via-blue-950/30 to-purple-950/40 border border-cyan-500/30 hover:border-cyan-400 cursor-pointer transition-all flex items-center justify-between group"
+          className="p-4 rounded-3xl bg-gradient-to-r from-cyan-950/40 via-blue-950/30 to-purple-950/40 border border-cyan-500/30 hover:border-cyan-400 cursor-pointer transition-all flex items-center justify-between group shadow-lg active:scale-98"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+            <div className="w-11 h-11 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform">
               <Scale className="w-5 h-5" />
             </div>
             <div>
               <div className="text-sm font-bold text-white flex items-center gap-1.5">
-                <span>Multi-Criteria Decision Optimizer</span>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">NEW</span>
+                <span>Multi-Criteria Decision AI Optimizer</span>
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                  AI LAB
+                </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
                 Evaluate financial trade-offs (WSM model, sensitivity analysis & confidence scoring).
@@ -112,15 +139,15 @@ export const ProfileScreen: React.FC<{
         </div>
       )}
 
-      {/* Security & Preferences Section */}
-      <div className="p-5 rounded-2xl bg-[#0E1528] border border-white/10 space-y-4">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+      {/* Security & Biometrics Controls */}
+      <FinFamCard variant="default" className="space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 border-b border-slate-800/80 pb-3">
           <Shield className="w-4 h-4 text-cyan-400" />
           Security & Biometrics
         </h3>
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#050816] border border-white/5">
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
             <div className="flex items-center gap-3">
               <Fingerprint className="w-5 h-5 text-cyan-400" />
               <div>
@@ -142,7 +169,7 @@ export const ProfileScreen: React.FC<{
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#050816] border border-white/5">
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
             <div className="flex items-center gap-3">
               <Bell className="w-5 h-5 text-indigo-400" />
               <div>
@@ -164,43 +191,45 @@ export const ProfileScreen: React.FC<{
             </button>
           </div>
         </div>
-      </div>
+      </FinFamCard>
 
-      {/* Household Members Overview */}
-      <div className="p-5 rounded-2xl bg-[#0E1528] border border-white/10 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Users className="w-4 h-4 text-cyan-400" />
-            Family Members ({familyMembers.length})
+      {/* Menu Settings Sections */}
+      {menuSections.map((sec, sIdx) => (
+        <FinFamCard key={sIdx} variant="default" className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
+            {sec.title}
           </h3>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {familyMembers.map((m) => (
-            <div
-              key={m.id}
-              className="p-3 rounded-xl bg-[#050816] border border-white/5 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-2.5">
+          <div className="space-y-2">
+            {sec.items.map((item, iIdx) => {
+              const Icon = item.icon;
+              return (
                 <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white"
-                  style={{ backgroundColor: m.avatarColorHex || m.avatarColor || '#06B6D4' }}
+                  key={iIdx}
+                  className="p-3 rounded-2xl bg-slate-900/40 hover:bg-slate-850 border border-slate-800 flex items-center justify-between transition-all cursor-pointer group"
                 >
-                  {m.name.split(' ').map((n) => n[0]).join('')}
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white">{m.name}</div>
-                  <div className="text-[10px] text-slate-400">{m.role}</div>
-                </div>
-              </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-slate-800 text-slate-300 group-hover:text-cyan-400 flex items-center justify-center transition-colors">
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">{item.label}</span>
+                      <span className="text-[10px] text-slate-400 block">{item.desc}</span>
+                    </div>
+                  </div>
 
-              <div className="text-right text-[11px] font-mono text-cyan-400">
-                +{FinancialEngine.formatINR(m.monthlyContribution)}/mo
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
+                      {item.badge}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 group-hover:translate-x-0.5 transition-all" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </FinFamCard>
+      ))}
     </div>
   );
 };

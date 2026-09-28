@@ -1,10 +1,41 @@
 @import "tailwindcss";
 
+:root {
+  --finfam-bg: #050816;
+  --finfam-surface: #0D1322;
+  --finfam-accent: #06B6D4;
+}
+
+[data-theme="emerald"] {
+  --finfam-bg: #02140F;
+  --finfam-surface: #05261C;
+  --finfam-accent: #10B981;
+}
+
+[data-theme="cyber"] {
+  --finfam-bg: #031022;
+  --finfam-surface: #071C38;
+  --finfam-accent: #38BDF8;
+}
+
+[data-theme="amethyst"] {
+  --finfam-bg: #0E051C;
+  --finfam-surface: #1B0B33;
+  --finfam-accent: #C084FC;
+}
+
+[data-theme="light"] {
+  --finfam-bg: #0B132B;
+  --finfam-surface: #162447;
+  --finfam-accent: #00F0FF;
+}
+
 @layer base {
   body {
-    background-color: #050816;
+    background-color: var(--finfam-bg);
     color: #F8FAFC;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
 }
 
