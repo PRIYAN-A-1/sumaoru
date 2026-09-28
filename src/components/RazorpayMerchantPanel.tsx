@@ -40,6 +40,12 @@ export function RazorpayMerchantPanel() {
   }
   const money = (amount: number, currency: string) => new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(amount / 100);
   return <section className="rounded-2xl border border-emerald-700 bg-slate-900 p-5 space-y-4" aria-label="Razorpay merchant account">
+    <div className="rounded-xl border border-slate-700 bg-slate-950 p-4 space-y-3">
+      <h2 className="text-lg font-semibold text-white">Pay via Razorpay</h2>
+      <p className="text-sm text-slate-300">Open @anandanpriyan’s Razorpay payment page to review the recipient and amount before paying.</p>
+      <a href="https://razorpay.me/@anandanpriyan" target="_blank" rel="noopener noreferrer" aria-describedby="razorpay-page-note" className="inline-flex min-h-11 items-center rounded-lg bg-emerald-700 px-4 py-2 font-semibold text-white hover:bg-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-400">Pay via Razorpay <span className="sr-only">(opens in a new tab)</span></a>
+      <p id="razorpay-page-note" className="text-xs text-slate-400">Opens in a new tab. Payment confirmation is shown by Razorpay. This link does not automatically unlock FinFam Premium.</p>
+    </div>
     <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-bold text-white">Razorpay merchant account</h2><p className="text-sm text-slate-300">Your account’s actual payments • auto-refresh every 15 seconds</p></div>
       <span className="text-emerald-300">{data ? `${error ? 'Sync interrupted' : 'Connected'} · ${data.mode.toUpperCase()}` : 'Connection not verified'}</span></div>
     <p className="text-sm text-slate-300">Configure your Razorpay API keys securely on the server, then sign in as the merchant administrator to verify the connection. Never enter your Razorpay password here.</p>
