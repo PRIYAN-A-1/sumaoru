@@ -1,3 +1,4 @@
+import { RazorpayMerchantPanel } from '../components/RazorpayMerchantPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import {
@@ -353,15 +354,16 @@ export const PaymentScreen: React.FC<{ onNavigateToTransfer: () => void }> = ({
 
   return (
     <div className="space-y-6 pb-16 animate-fade-in text-slate-100 max-w-7xl mx-auto">
+      <RazorpayMerchantPanel />
       {/* Top Banner & Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              UPI 2.0 Live Gateway
+              FinFam payment tools
             </span>
-            <span className="text-xs text-slate-400 font-mono">Test Mode (rzp_test_TNKQHoOkeQFUas)</span>
+            <span className="text-xs text-slate-400 font-mono">Merchant connection status shown above</span>
           </div>
           <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white mt-1 flex items-center gap-2">
             FinFam Pay

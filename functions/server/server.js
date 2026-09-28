@@ -26,6 +26,7 @@ app.use(cors());
 // Raw body parser for Razorpay webhook signature verification
 app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/razorpay/merchant/webhook', express.raw({ type: 'application/json', limit: '256kb' }));
 app.use(express.json());
 
 // Initialize Firebase Admin SDK (optional fallback to in-memory store)
@@ -45,6 +46,9 @@ if (!admin.apps.length) {
     console.warn('⚠️ Firebase Admin initialized in local mode:', e.message);
   }
 }
+
+if (!db && admin.apps.length) db = admin.firestore();
+require('./razorpayMerchant').mountMerchant(app, { admin, db });
 
 // In-Memory Persistence stores for resilience
 const ordersStore = new Map();
@@ -203,15 +207,15 @@ function seedDefaultUpiTransactions() {
 seedDefaultUpiTransactions();
 
 
-// Razorpay Instance (Credentials aligned with paymentgateway-portotype-1 with env overrides)
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_TNKQHoOkeQFUas';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'sOVxj3tP47Wpzsg2ig3vnOtb';
-const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'whsec_sample_webhook_secret_abcde';
+// Razorpay credentials must be supplied by the backend environment.
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || '';
 
-const razorpay = new Razorpay({
+const razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET ? new Razorpay({
   key_id: RAZORPAY_KEY_ID,
   key_secret: RAZORPAY_KEY_SECRET
-});
+}) : null;
 
 // Authoritative Server-Side Plan Price Registry
 const PLAN_REGISTRY = {
@@ -501,8 +505,7 @@ async function handleCreatePaymentOrder(req, res) {
         const rzpOrder = await razorpay.orders.create(orderOptions);
         razorpayOrderId = rzpOrder.id;
       } catch (rzpErr) {
-        console.warn('⚠️ Razorpay live API call fallback to compliant test order ID:', rzpErr.message);
-        razorpayOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        return res.status(503).json({ success: false, error: 'Razorpay order creation failed. Check backend configuration and retry.' });
       }
 
       const orderRecord = {
@@ -574,8 +577,7 @@ async function handleCreatePaymentOrder(req, res) {
       });
       razorpayOrderId = rzpOrder.id;
     } catch (rzpErr) {
-      console.warn('⚠️ Razorpay/FamPay live order creation fallback to simulated test order ID:', rzpErr.message);
-      razorpayOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      return res.status(503).json({ success: false, error: 'Razorpay order creation failed. Check backend configuration and retry.' });
     }
 
     const isDirectVaultTransfer = req.body.isDirectVaultTransfer === true || req.body.paymentMethod === 'VAULT_DIRECT';
@@ -830,12 +832,7 @@ async function handleVerifyPayment(req, res) {
     // Verify HMAC-SHA256 Signature (Timing-safe)
     let isSignatureValid = false;
     if (razorpaySignature) {
-      if (
-        razorpaySignature.startsWith('test_sig_') ||
-        razorpaySignature.startsWith('sim_sig_valid_')
-      ) {
-        isSignatureValid = true;
-      } else {
+      {
         try {
           const hmac = crypto.createHmac('sha256', RAZORPAY_KEY_SECRET);
           hmac.update(`${razorpayOrderId}|${razorpayPaymentId}`);
