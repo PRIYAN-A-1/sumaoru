@@ -1,39 +1,44 @@
 @import "tailwindcss";
 
 :root {
-  --finfam-bg: #050816;
-  --finfam-surface: #0D1322;
-  --finfam-accent: #06B6D4;
+  --finfam-bg: #050510;
+  --finfam-surface: #0B0B1A;
+  --finfam-accent: #00F0FF;
+  --finfam-text: #F8FAFC;
 }
 
 [data-theme="emerald"] {
   --finfam-bg: #02140F;
   --finfam-surface: #05261C;
   --finfam-accent: #10B981;
+  --finfam-text: #F8FAFC;
 }
 
 [data-theme="cyber"] {
   --finfam-bg: #031022;
   --finfam-surface: #071C38;
   --finfam-accent: #38BDF8;
+  --finfam-text: #F8FAFC;
 }
 
 [data-theme="amethyst"] {
   --finfam-bg: #0E051C;
   --finfam-surface: #1B0B33;
   --finfam-accent: #C084FC;
+  --finfam-text: #F8FAFC;
 }
 
-[data-theme="light"] {
+[data-theme="dark"] {
   --finfam-bg: #0B132B;
   --finfam-surface: #162447;
   --finfam-accent: #00F0FF;
+  --finfam-text: #F8FAFC;
 }
 
 @layer base {
   body {
     background-color: var(--finfam-bg);
-    color: #F8FAFC;
+    color: var(--finfam-text);
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     transition: background-color 0.25s ease, color 0.25s ease;
   }
